@@ -233,7 +233,7 @@ static int update(const printbuffer *p) {
 	return p->offset + strlen(str);
 }
 
-// 打印数字项
+// 将数字项渲染成打印文本
 static char *print_number(const cJSON *item, printbuffer *p) {
 	char *str = 0;
 	double d = item->valuedouble;
@@ -487,3 +487,139 @@ static const char *parse_string(cJSON *item, const char *str, const char **ep) {
 	}
 	return ptr1;
 }
+
+// 将字符串项渲染成打印文本
+static char *print_string_ptr(const char *str, printbuffer *p) {
+	const char *ptr1;
+	char *ptr2;
+	char *out;
+	int len = 0;
+	int flag = 0;
+	unsigned char token;
+
+	// 空字符串
+	if (!str) {
+		if (p) {
+			// 3个字符 双引号+'\0'
+			out = ensure(p, 3);
+		} else {
+			out = (char*)cJSON_malloc(3);
+		}
+		if (!out) {
+			return 0;
+		}
+		strcpy(out, "\"\"");
+		
+		return out;
+	} 
+
+	// 若有特殊字符（空格、回车等等）则将flag设置为1
+	for (ptr1 = str; *ptr1; ptr1++) {
+		flag |= (((*ptr1 > 0) && (*ptr1 < 32))) || (*ptr1 == '\"') || (*ptr1 == '\\') ? 1 : 0;
+	}
+	// 无特殊字符
+	if (!flag) {
+		len = ptr1 - str;
+		if (p) {
+			out = ensure(p, len + 3);
+		} else {
+			out = (char*)cJSON_malloc(len + 3);
+		}
+		if (!out) {
+			return 0;
+		}
+
+		ptr2 = out;
+		*ptr2++ = '\"';
+		strcpy(ptr2, str);
+		ptr2[len] = '\"';
+		ptr2[len + 1] = '\0';
+		
+		return out;
+	}
+	
+	ptr1 = str;
+	// 计算字符串的总长度
+	while ((token = *ptr1) && ++len) {
+		if (strchr("\"\\\b\f\n\r\t", token)) {
+			len++;
+		} else if (token < 32) {
+			len += 5;	// \uXXXX
+		}
+		ptr1++;
+	}
+
+	if (p) {
+		out = ensure(p, len + 3);
+	} else {
+		out = (char*)cJSON_malloc(len + 3);
+	}
+	if (!out) {
+		return 0;
+	}
+
+	ptr2 = out;
+	ptr1 = str;
+	*ptr2++ = '\"';
+	// 复制字符串
+	while (*ptr1) {
+		if (((unsigned char)*ptr1 > 31) && (*ptr1 != '\"') && (*ptr1 != '\\')) {
+			*ptr2++ = *ptr1++;
+		} else {
+			*ptr2++ = '\\';
+			switch (token = *ptr1) {
+				case '\\':
+					*ptr2++ = '\\';
+					break;
+				case '\"':
+					*ptr2++ = '\"';
+					break;
+				case '\b':
+					*ptr2++ = 'b';
+					break;
+				case '\f':
+					*ptr2++ = 'f';
+					break;
+				case '\n':
+					*ptr2++ = 'n';
+					break;
+				case '\r':
+					*ptr2++ = 'r';
+					break;
+				case '\t':
+					*ptr2++ = 't';
+					break;
+				default:
+					sprintf(ptr2, "u%04x", token);
+					ptr2 += 5;
+					break;
+			}
+		}
+	}
+	*ptr2++ = '\"';
+	*ptr2++ = '\0';
+
+	return out;
+}
+
+// 在item对象调用print_string_ptr
+static char *print_string(cJSON *item, printbuffer *p) {
+	return print_string_ptr(item->valuestring, p);
+}
+
+// 声明函数
+static const char *parse_value(cJSON *item, const char *value, const char **ep);
+static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p);
+//static const char *parse_array(cJSON *item, const char *value, const char **ep);
+//static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p);
+//static const char *parse_object(cJSON *item, const char *value, const char **ep);
+//static char *print_object(const cJSON *item, int depth, int fmt, printbuffer *p);
+
+// 跳过特殊字符
+static const char *skip(const char *in) {
+	while (in && *in && ((unsigned char)*in <= 32)) {
+		in++;
+	}
+	return in;
+}
+
