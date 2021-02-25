@@ -20,10 +20,10 @@
 #endif 
 
 // 错误处理
-static const char *ep;
+static const char *global_ep;
 
 const char *cJSON_GetErrorPtr(void) {
-	return ep;
+	return global_ep;
 }
 
 // 不区分大小写字符串对比
@@ -609,13 +609,13 @@ static char *print_string(cJSON *item, printbuffer *p) {
 
 // 声明函数
 static const char *parse_value(cJSON *item, const char *value, const char **ep);
-static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p);
+static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p); // fmt
 //static const char *parse_array(cJSON *item, const char *value, const char **ep);
 //static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p);
 //static const char *parse_object(cJSON *item, const char *value, const char **ep);
 //static char *print_object(const cJSON *item, int depth, int fmt, printbuffer *p);
 
-// 跳过特殊字符
+// 跳过空指针、null、 无法打印字符
 static const char *skip(const char *in) {
 	while (in && *in && ((unsigned char)*in <= 32)) {
 		in++;
@@ -623,3 +623,210 @@ static const char *skip(const char *in) {
 	return in;
 }
 
+// 解析对象，创建根结点并填充
+cJSON *cJSON_ParseWithOpts(const char *value, const char **return_parse_end, int require_null_terminated) {
+	const char *end = 0;
+	// 若未使用特定错误指针，则使用全局错误指针
+	const char **ep = return_parse_end ? return_parse_end : &global_ep;
+	cJSON *c = cJSON_New_Item();
+	*ep = 0;
+	if (!c) {
+		return 0;
+	}
+
+	end = parse_value(c, skip(value), ep);
+	if (!end) {
+		// 解析失败
+		cJSON_Delete(c);
+		return 0;
+	}
+	// 若需要结尾为空值的cJSON，而没有其他值， 则跳过空值再检查后续字符
+	if (require_null_terminated) {
+		end = skip(end);
+		if (*end) {
+			cJSON_Delete(c);
+			return 0;
+		}
+	}
+	if (return_parse_end) {
+		*return_parse_end = end;
+	}
+
+	return c;
+}
+
+// cJSON_Parse 默认选项
+cJSON *cJSON_Parse(const char *value) {
+	return cJSON_ParseWithOpts(value, 0, 0);
+}
+
+// 渲染cJSON为文本中
+char *cJSON_Print(const cJSON *item) {
+	return print_value(item, 0, 1, 0);
+}
+
+char  *cJSON_PrintUnformatted(const cJSON *item) {
+	return print_value(item, 0, 0, 0);
+}
+
+char *cJSON_PrintBuffered(const cJSON *item, int prebuffer, int fmt) {
+	printbuffer p;
+	p.buffer = (char*)cJSON_malloc(prebuffer);
+	if (!p.buffer) {
+		return 0;
+	}
+	p.length = prebuffer;
+	p.offset = 0;
+
+	return print_value(item, 0, fmt, &p);
+}
+
+// 解析核心 —— 不同文本进行对应处理
+static const char *parse_value(cJSON *item, const char *value, const char **ep) {
+	if (!value) {
+		return 0;
+	}
+
+	if (!strncmp(value, "null", 4)) {
+		item->type = cJSON_NULL;
+		return value + 4;
+	}
+	if (!strncmp(value, "false", 5)) {
+		item->type = cJSON_False;
+		return value + 5;
+	}
+	if (!strncmp(value, "true", 4)) {
+		item->type = cJSON_True;
+		item->valueint = 1;
+		return value + 4;
+	}
+	if (*value == '\"') {
+		return parse_string(item, value, ep);
+	}
+	if ((*value == '-') || ((*value >= '0') && (*value <= '9'))) {
+		return parse_number(item, value);
+	}
+	/*
+	if (*value == '[') {
+		return parse_array(item, value, ep);
+	}
+	if (*value == '{') {
+		return parse_object(item, value, ep);
+	}
+	*/
+	*ep = value;
+	return 0;
+}
+
+// 渲染item对象到文本
+static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p) {
+	char *out = 0;
+	if (!item) {
+		return 0;
+	}
+	if (p) {
+		switch ((item->type) & 0xFF)
+		{
+			case cJSON_NULL:
+				out = ensure(p, 5);
+				if (out) {
+					strcpy(out, "null");
+				}
+				break;
+			case cJSON_False:
+				out = ensure(p, 6);
+				if (out) {
+					strcpy(out, "false");
+				}
+				break;
+			case cJSON_True:
+				out = ensure(p, 5);
+				if (out) {
+					strcpy(out, "true");
+				}
+				break;
+			case cJSON_Number:
+				out = print_number(item, p);
+				break;
+			case cJSON_String:
+				out = print_string(item, p);
+				break;
+			/*case cJSON_Array:
+				out = print_array(item, depth, fmt, p);
+				break;
+			case cJSON_Object:
+				out = print_object(item, depth, fmt, p);
+				break;*/
+		} 
+	} else {
+		switch ((item->type) & 0xFF)
+		{
+		case cJSON_NULL:
+			out = cJSON_strdup("null");
+			break;
+		case cJSON_False:
+			out = cJSON_strdup("false");
+			break;
+		case cJSON_True:
+			out = cJSON_strdup("true");
+			break;
+		case cJSON_Number:
+			out = print_number(item, 0);
+			break;
+		case cJSON_String:
+			out = print_string(item, 0);
+			break;
+			/*case cJSON_Array:
+				out = print_array(item, depth, fmt, 0);
+				break;
+			case cJSON_Object:
+				out = print_object(item, depth, fmt, 0);
+				break;*/
+		}
+	}
+
+	return out;
+}
+
+// 通过文本创建数组
+
+// 渲染数组到文本
+
+// 通过文本创建对象
+
+// 渲染对象到文本
+
+// 获取 数组长度、cJSON对象item
+int	  cJSON_GetArraySize(const cJSON *array) {
+	cJSON *c = array->child;
+	int len = 0;
+	while (c) {
+		len++;
+		c = c->next;
+	}
+	return len;
+}
+
+// 根据获取第item项cJSON对象
+cJSON *cJSON_GetArrayItem(const cJSON *array, int item) {
+	cJSON *c = array ? array->child : 0;
+	while (c && item > 0) {
+		item--;
+		c = c->next;
+	}
+	return c;
+}
+
+// 获取key值为string的cJSON对象
+cJSON *cJSON_GetObjectItem(const cJSON *object, const char *string) {
+	cJSON *c = object ? object->child : 0;
+	while (c && cJSON_strcasecmp(c->string, string)) {
+		c = c->next;
+	}
+	return c;
+}
+
+// 判断key值为string的cJSON是否存在
+int cJSON_HasObjectItem(const cJSON *object, const char *string) {
+	return cJSON_GetObjectItem(object, string) ? 1 : 0;
+}

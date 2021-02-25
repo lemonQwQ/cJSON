@@ -49,20 +49,22 @@ extern "C" //去寻找C标准的函数
 
 	extern void cJSON_Delete(cJSON *c);
 
-//	extern cJSON *cJSON_Parse(const char *value);
-//
-//	extern char  *cJSON_Print(const cJSON *item);
-//
-//	extern char  *cJSON_PrintUnformatted(const cJSON *item);
-//
-//	extern char *cJSON_PrintBuffered(const cJSON *item, int prebuffer, int fmt);
-//
-//	extern int	  cJSON_GetArraySize(const cJSON *array);
-//
-//	extern cJSON *cJSON_GetArrayItem(const cJSON *array, int item);
-//
-//	extern cJSON *cJSON_GetObjectItem(const cJSON *object, const char *string);
-//	extern int cJSON_HasObjectItem(const cJSON *object, const char *string);
+	extern cJSON *cJSON_ParseWithOpts(const char *value, const char **return_parse_end, int require_null_terminated);
+
+	extern cJSON *cJSON_Parse(const char *value);
+
+	extern char  *cJSON_Print(const cJSON *item);
+
+	extern char  *cJSON_PrintUnformatted(const cJSON *item);
+
+	extern char *cJSON_PrintBuffered(const cJSON *item, int prebuffer, int fmt);
+
+	extern int	  cJSON_GetArraySize(const cJSON *array);
+
+	extern cJSON *cJSON_GetArrayItem(const cJSON *array, int item);
+
+	extern cJSON *cJSON_GetObjectItem(const cJSON *object, const char *string);
+	extern int cJSON_HasObjectItem(const cJSON *object, const char *string);
 
 //	extern cJSON *cJSON_CreateNull(void);
 //	extern cJSON *cJSON_CreateTrue(void);
@@ -95,9 +97,7 @@ extern "C" //去寻找C标准的函数
 //	extern void cJSON_ReplaceItemInObject(cJSON *object, const char *string, cJSON *newitem);
 //
 //	extern cJSON *cJSON_Duplicate(const cJSON *item, int recurse);
-//
-//	extern cJSON *cJSON_ParseWithOpts(const char *value, const char **return_parse_end, int require_null_terminated);
-//
+
 //	extern void cJSON_Minify(char *json);
 //
 //#define cJSON_AddNullToObject(object,name) cJSON_AddItemToObject(object, name, cJSON_CreateNull())
