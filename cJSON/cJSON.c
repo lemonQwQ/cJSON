@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include "cJSON.h"
+#pragma warning(disable:4996)
 
 // 使用预处理器确定整数的位数
 #if INT_MAX == 32767
@@ -180,6 +181,7 @@ static int pow2gt(int x) {
 	return x+1;
 }
 
+// 打印缓存
 typedef struct {
 	char *buffer;
 	int length;
@@ -219,4 +221,269 @@ static char* ensure(printbuffer *p, int needed) {
 	p->buffer = newbuffer;
 
 	return newbuffer + p->offset;
+}
+
+// 计算printbuffer中字符串的新长度
+static int update(const printbuffer *p) {
+	char *str;
+	if (!p || !p->buffer) {
+		return 0;
+	}
+	str = p->buffer + p->offset;
+	return p->offset + strlen(str);
+}
+
+// 打印数字项
+static char *print_number(const cJSON *item, printbuffer *p) {
+	char *str = 0;
+	double d = item->valuedouble;
+	// 当前数字为 0 
+	if (d == 0) {
+		if (p) {
+			str = ensure(p, 2);
+		} else {
+			str = (char *)cJSON_malloc(2);
+		}
+		if (str) {
+			strcpy(str, "0");
+		}
+
+	} else if ((fabs(((double)item->valuedouble) - d) <= DBL_EPSILON) && (d <= INT_MAX) && (d >= INT_MIN)) { 	
+		// 当前数字是整数 
+		// 至少21位数，因为2^64-1次 为 21位 即需要21个字符
+		if (p) {
+			str = ensure(p, 21);
+		} else {
+			str = (char*)cJSON_malloc(21);
+		}
+		if (str) {
+			sprintf(str, "%d", item->valueint);
+		}
+	} else {
+		// 当前数字为浮点数
+		if (p) {
+			str = ensure(p, 64);
+		} else {
+			str = (char*)cJSON_malloc(64);
+		}
+		if (str) {
+			// 检查无穷小和无穷大的情况
+			if ((d * 0) != 0) {
+				sprintf(str, "null");
+			} else if ((fabs(floor(d) - d) <= DBL_EPSILON) && (fabs(d) < 1.0e60)) {
+				// 数值小于 1.0e60 整数显示
+				sprintf(str, "%.0f", d);
+			} else if ((fabs(d) < 1.0e-6) || (fabs(d) > 1.0e9)) {
+				// 数值太小或者数值过大 都需要采用科学计数法
+				sprintf(str, "%e", d);
+			} else {
+				sprintf(str, "%f", d);
+			}
+		}
+	}
+	return str;
+}
+
+// 解析4位16进制数
+static unsigned parse_hex4(const char *str) {
+	unsigned h = 0;
+	if ((*str >= '0') && (*str <= '9')) {
+		h += (*str) - '0';
+	} else if ((*str >= 'A') && (*str <= 'F')) {
+		h += (*str) - 'A' + 10;
+	} else if ((*str >= 'a') && (*str <= 'f')) {
+		h += (*str) - 'a' + 10;
+	} else {
+		// 无效的字符
+		return 0;
+	}
+
+	h = h << 4;
+	str++;
+	if ((*str >= '0') && (*str <= '9')) {
+		h += (*str) - '0';
+	}
+	else if ((*str >= 'A') && (*str <= 'F')) {
+		h += (*str) - 'A' + 10;
+	}
+	else if ((*str >= 'a') && (*str <= 'f')) {
+		h += (*str) - 'a' + 10;
+	}
+	else {
+		// 无效的字符
+		return 0;
+	}
+
+	h = h << 4;
+	str++;
+	if ((*str >= '0') && (*str <= '9')) {
+		h += (*str) - '0';
+	}
+	else if ((*str >= 'A') && (*str <= 'F')) {
+		h += (*str) - 'A' + 10;
+	}
+	else if ((*str >= 'a') && (*str <= 'f')) {
+		h += (*str) - 'a' + 10;
+	}
+	else {
+		// 无效的字符
+		return 0;
+	}
+
+	h = h << 4;
+	str++;
+	if ((*str >= '0') && (*str <= '9')) {
+		h += (*str) - '0';
+	}
+	else if ((*str >= 'A') && (*str <= 'F')) {
+		h += (*str) - 'A' + 10;
+	}
+	else if ((*str >= 'a') && (*str <= 'f')) {
+		h += (*str) - 'a' + 10;
+	}
+	else {
+		// 无效的字符
+		return 0;
+	}
+
+	return h;
+}
+
+// 给定长度的UTF8编码的第一字节
+static const unsigned char firstByteMark[7] = { 0x00, 0x00, 0xC0, 0xE0,	0xF0, 0xF8, 0xFC };
+
+// 解析文本字符串，将结果填充到对象item中
+static const char *parse_string(cJSON *item, const char *str, const char **ep) {
+	const char *ptr1 = str + 1;
+	const char *end_ptr = str + 1;
+	char *ptr2;
+	char *out;
+	int len = 0;
+	unsigned uc1;
+	unsigned uc2;
+
+	if (*str != '\"') {
+		*ep = str;
+		return 0;
+	}
+
+	// 计算字符串长度
+	while ((*end_ptr != '\"') && *end_ptr && ++len) {
+		if (*end_ptr++ == '\\') {
+			if (*end_ptr == '\0') {
+				return 0;
+			}
+			end_ptr++;
+		}
+	}
+	
+	out = (char*)cJSON_malloc(len + 1);
+	if (!out) {
+		return 0;
+	}
+	item->valuestring = out;
+	item->type = cJSON_String;
+
+	ptr1 = str + 1;
+	ptr2 = out;
+	while (ptr1 < end_ptr) {
+		if (*ptr1 != '\\') {
+			*ptr2++ = *ptr1++;
+		}
+		else {
+			// 转义字符
+			ptr1++;
+			switch (*ptr1)
+			{
+				case 'b':
+					*ptr2++ = '\b';
+					break;
+				case 'f':
+					*ptr2++ = '\f';
+					break;
+				case 'n':
+					*ptr2++ = '\n';
+					break;
+				case 'r':
+					*ptr2++ = '\r';
+					break;
+				case 't':
+					*ptr2++ = '\t';
+					break;
+				case 'u':
+					uc1 = parse_hex4(ptr1 + 1); // 获取4位16进制数
+					ptr1 += 4;
+					if (ptr1 >= end_ptr) {
+						*ep = str;
+						return 0;
+					}
+					// 检查 uc1 范围是否有效
+					if (((uc1 >= 0xDC00) && (uc1 <= 0xDFFF)) || (uc1 == 0)) {
+						// Low Surrogates 或 uc1为0
+						*ep = str;
+						return 0;
+					}
+
+					// UTF16 Surrogates pairs
+					if ((uc1 >= 0xD800) && (uc1 <= 0xDBFF)) {
+						// 需要搭配Low Surrogates 两两组合
+						if ((ptr1 + 6) > end_ptr) {
+							*ep = str;
+							return 0;
+						}
+						if ((ptr1[1] != '\\') || (ptr1[2] != 'u')) {
+							*ep = str;
+							return 0;
+						}
+						uc2 = parse_hex4(ptr1 + 3);
+						ptr1 += 6;
+						if ((uc2 < 0xDC00) || (uc2 > 0xDFFF)) {
+							*ep = str;
+							return 0;
+						}
+						uc1 = 0x10000 + (((uc1 & 0x3FF) << 10) | (uc2 & 0x3FF));
+					}
+
+
+					len = 4;
+					// 确定字节个数
+					if (uc1 < 0x80) {
+						// 普通ASCII值， 编码为 0xxxxxxx 1个字节
+						len = 1;
+					} else if (uc1 < 0x800) {
+						// 两个字节 编码为 110xxxxx 10xxxxxx 
+						len = 2;
+					} else if (uc1 < 0x10000) {
+						len = 3;
+					}
+					ptr2 += len;
+					
+					switch (len)
+					{
+						case 4:
+							*--ptr2 = ((uc1 | 0x80) & 0xBF);
+							uc1 >>= 6;
+						case 3:
+							*--ptr2 = ((uc1 | 0x80) & 0xBF);
+							uc1 >>= 6;
+						case 2:
+							*--ptr2 = ((uc1 | 0x80) & 0xBF);
+							uc1 >>= 6;
+						case 1:
+							*--ptr2 = (uc1 | firstByteMark[len]);
+					}
+					ptr2 += len;
+					break;
+				default:
+					*ptr2++ = *ptr1++;
+					break;
+			}
+			ptr1++;
+		}
+	}
+	*ptr2 = '\0';
+	if (*ptr1 == '\"') {
+		ptr1++;
+	}
+	return ptr1;
 }
