@@ -1372,3 +1372,62 @@ void cJSON_AddItemReferenceToArray(cJSON *array, cJSON *item) {
 void	cJSON_AddItemReferenceToObject(cJSON *object, const char *string, cJSON *item) {
 	cJSON_AddItemToObject(object, string, create_reference(item));
 }
+
+// 将数组中第which项的cJSON删除并取出
+extern cJSON *cJSON_DetachItemFromArray(cJSON *array, int which) {
+	cJSON *c = array->child;
+	while (c && (which > 0)) {
+		c = c->next;
+		which--;
+	}
+
+	if (!c) {
+		return 0;
+	}
+
+	if (c->prev) {
+		c->prev->next = c->next;
+	}
+
+	if (c->next) {
+		c->next->prev = c->prev;
+	}
+
+	if (c == array->child) {
+		array->child = c->next;
+	}
+
+	c->prev = c->next = 0;
+
+	return c;
+}
+
+// 将数组中第which项的cJSON删除
+extern void   cJSON_DeleteItemFromArray(cJSON *array, int which) {
+	cJSON_Delete(cJSON_DetachItemFromArray(array, which));
+}
+
+// 将对象key值为string的cJSON删除并取出
+extern cJSON *cJSON_DetachItemFromObject(cJSON *object, const char *string) {
+	int i = 0;
+	cJSON *c = object->child;
+	while (c && cJSON_strcasecmp(c->string, string)) {
+		i++;
+		c = c->next;
+	}
+
+	if (c) {
+		return cJSON_DetachItemFromArray(object, i);
+	}
+
+	return 0;
+}
+
+// 将对象key值为string的cJSON删除
+extern void   cJSON_DeleteItemFromObject(cJSON *object, const char *string) {
+	cJSON_Delete(cJSON_DetachItemFromObject(object, string));
+}
+
+
+
+

@@ -73,6 +73,12 @@ extern "C" //去寻找C标准的函数
 	extern void cJSON_AddItemReferenceToArray(cJSON *array, cJSON *item);
 	extern void	cJSON_AddItemReferenceToObject(cJSON *object, const char *string, cJSON *item);
 
+	extern cJSON *cJSON_DetachItemFromArray(cJSON *array, int which);
+	extern void   cJSON_DeleteItemFromArray(cJSON *array, int which);
+	extern cJSON *cJSON_DetachItemFromObject(cJSON *object, const char *string);
+	extern void   cJSON_DeleteItemFromObject(cJSON *object, const char *string);
+
+
 //	extern cJSON *cJSON_CreateNull(void);
 //	extern cJSON *cJSON_CreateTrue(void);
 //	extern cJSON *cJSON_CreateFalse(void);
@@ -87,12 +93,6 @@ extern "C" //去寻找C标准的函数
 //	extern cJSON *cJSON_CreateDoubleArray(const double *numbers, int count);
 //	extern cJSON *cJSON_CreateStringArray(const char **strings, int count);
 
-
-//	extern cJSON *cJSON_DetachItemFromArray(cJSON *array, int which);
-//	extern void   cJSON_DeleteItemFromArray(cJSON *array, int which);
-//	extern cJSON *cJSON_DetachItemFromObject(cJSON *object, const char *string);
-//	extern void   cJSON_DeleteItemFromObject(cJSON *object, const char *string);
-//
 //	extern void cJSON_InsertItemInArray(cJSON *array, int which, cJSON *newitem); /* Shifts pre-existing items to the right. */
 //	extern void cJSON_ReplaceItemInArray(cJSON *array, int which, cJSON *newitem);
 //	extern void cJSON_ReplaceItemInObject(cJSON *object, const char *string, cJSON *newitem);
