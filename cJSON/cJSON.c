@@ -836,3 +836,64 @@ static void suffix_object(cJSON *prev, cJSON *item) {
 	prev->next = item;
 	item->prev = prev;
 }
+
+
+// 处理参照（reference）函数 key/value
+static cJSON *create_reference(const cJSON *item) {
+	cJSON *ref = cJSON_New_Item();
+	if (!ref) {
+		return 0;
+	}
+	memcpy(ref, item, sizeof(cJSON));
+	ref->string = 0;
+	ref->type |= cJSON_IsReference;
+	ref->next = ref->prev = 0;
+	return ref;
+}
+
+// 在array数组中添加对象item
+void cJSON_AddItemToArray(cJSON *array, cJSON *item) {
+	cJSON *c = array->child;
+	if (!item) {
+		return;
+	}
+	if (!c) {
+		array->child = item;
+	} else {
+		while (c->next) {
+			c = c->next;
+		}
+		suffix_object(c, item);
+	}
+}
+
+// string(key)/item(value) 添加到object数组中
+void cJSON_AddItemToObject(cJSON *object, const char *string, cJSON *item) {
+	if (!item) {
+		return;
+	}
+	// 释放掉item的旧key值
+	if (item->string) {
+		cJSON_frre(item->string);
+	}
+	item->string = cJSON_strdup(string);
+
+	cJSON_AddItemToArray(object, item);
+}
+
+void cJSON_AddItemToObjectCS(cJSON *object, const char *string, cJSON *item) {
+	if (!item) {
+		return;
+	}
+	
+	if (!(item->type & cJSON_StringIsConst) && item->string) {
+		cJSON_free(item->string);
+	}
+	item->string = (char*)string;
+	item->type |= cJSON_StringIsConst;
+	cJSON_AddItemToArray(object, item);
+}
+
+void cJSON_AddItemReferenceToArray(cJSON *array, cJSON *item) {
+
+}

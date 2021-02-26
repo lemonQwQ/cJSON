@@ -66,6 +66,13 @@ extern "C" //去寻找C标准的函数
 	extern cJSON *cJSON_GetObjectItem(const cJSON *object, const char *string);
 	extern int cJSON_HasObjectItem(const cJSON *object, const char *string);
 
+	extern void cJSON_AddItemToArray(cJSON *array, cJSON *item);
+	extern void	cJSON_AddItemToObject(cJSON *object, const char *string, cJSON *item);
+	extern void	cJSON_AddItemToObjectCS(cJSON *object, const char *string, cJSON *item);	/* Use this when string is definitely const (i.e. a literal, or as good as), and will definitely survive the cJSON object */
+
+	extern void cJSON_AddItemReferenceToArray(cJSON *array, cJSON *item);
+	extern void	cJSON_AddItemReferenceToObject(cJSON *object, const char *string, cJSON *item);
+
 //	extern cJSON *cJSON_CreateNull(void);
 //	extern cJSON *cJSON_CreateTrue(void);
 //	extern cJSON *cJSON_CreateFalse(void);
@@ -79,14 +86,8 @@ extern "C" //去寻找C标准的函数
 //	extern cJSON *cJSON_CreateFloatArray(const float *numbers, int count);
 //	extern cJSON *cJSON_CreateDoubleArray(const double *numbers, int count);
 //	extern cJSON *cJSON_CreateStringArray(const char **strings, int count);
-//
-//	extern void cJSON_AddItemToArray(cJSON *array, cJSON *item);
-//	extern void	cJSON_AddItemToObject(cJSON *object, const char *string, cJSON *item);
-//	extern void	cJSON_AddItemToObjectCS(cJSON *object, const char *string, cJSON *item);	/* Use this when string is definitely const (i.e. a literal, or as good as), and will definitely survive the cJSON object */
-//
-//	extern void cJSON_AddItemReferenceToArray(cJSON *array, cJSON *item);
-//	extern void	cJSON_AddItemReferenceToObject(cJSON *object, const char *string, cJSON *item);
-//
+
+
 //	extern cJSON *cJSON_DetachItemFromArray(cJSON *array, int which);
 //	extern void   cJSON_DeleteItemFromArray(cJSON *array, int which);
 //	extern cJSON *cJSON_DetachItemFromObject(cJSON *object, const char *string);
