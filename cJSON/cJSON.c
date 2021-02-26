@@ -609,11 +609,11 @@ static char *print_string(cJSON *item, printbuffer *p) {
 
 // 声明函数
 static const char *parse_value(cJSON *item, const char *value, const char **ep);
-static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p); // fmt
-//static const char *parse_array(cJSON *item, const char *value, const char **ep);
-//static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p);
-//static const char *parse_object(cJSON *item, const char *value, const char **ep);
-//static char *print_object(const cJSON *item, int depth, int fmt, printbuffer *p);
+static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p); // fmt是否规范
+static const char *parse_array(cJSON *item, const char *value, const char **ep);
+static char *print_array(const cJSON *item, int depth, int fmt, printbuffer *p);
+/*static const char *parse_object(cJSON *item, const char *value, const char **ep);
+static char *print_object(const cJSON *item, int depth, int fmt, printbuffer *p);*/
 
 // 跳过空指针、null、 无法打印字符
 static const char *skip(const char *in) {
@@ -706,14 +706,12 @@ static const char *parse_value(cJSON *item, const char *value, const char **ep) 
 	if ((*value == '-') || ((*value >= '0') && (*value <= '9'))) {
 		return parse_number(item, value);
 	}
-	/*
 	if (*value == '[') {
 		return parse_array(item, value, ep);
 	}
-	if (*value == '{') {
+	/*if (*value == '{') {
 		return parse_object(item, value, ep);
-	}
-	*/
+	}*/
 	*ep = value;
 	return 0;
 }
@@ -751,35 +749,35 @@ static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p) 
 			case cJSON_String:
 				out = print_string(item, p);
 				break;
-			/*case cJSON_Array:
+			case cJSON_Array:
 				out = print_array(item, depth, fmt, p);
 				break;
-			case cJSON_Object:
+			/*case cJSON_Object:
 				out = print_object(item, depth, fmt, p);
 				break;*/
 		} 
 	} else {
 		switch ((item->type) & 0xFF)
 		{
-		case cJSON_NULL:
-			out = cJSON_strdup("null");
-			break;
-		case cJSON_False:
-			out = cJSON_strdup("false");
-			break;
-		case cJSON_True:
-			out = cJSON_strdup("true");
-			break;
-		case cJSON_Number:
-			out = print_number(item, 0);
-			break;
-		case cJSON_String:
-			out = print_string(item, 0);
-			break;
-			/*case cJSON_Array:
+			case cJSON_NULL:
+				out = cJSON_strdup("null");
+				break;
+			case cJSON_False:
+				out = cJSON_strdup("false");
+				break;
+			case cJSON_True:
+				out = cJSON_strdup("true");
+				break;
+			case cJSON_Number:
+				out = print_number(item, 0);
+				break;
+			case cJSON_String:
+				out = print_string(item, 0);
+				break;
+			case cJSON_Array:
 				out = print_array(item, depth, fmt, 0);
 				break;
-			case cJSON_Object:
+			/*case cJSON_Object:
 				out = print_object(item, depth, fmt, 0);
 				break;*/
 		}
@@ -789,8 +787,192 @@ static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p) 
 }
 
 // 通过文本创建数组
+static const char *parse_array(cJSON *item, const char *value, const char **ep) {
+	cJSON *child;
+	if (*value != '[') {
+		*ep = value;
+		return 0;
+	}
+
+	item->type = cJSON_Array;
+	value = skip(value + 1);
+	if (*value == ']') {
+		// 空数组
+		return value + 1;
+	}
+
+	item->child = child = cJSON_New_Item();
+	if (!item->child) {
+		return 0;
+	}
+
+	// 跳过空格，获取值
+	value = skip(parse_value(child, skip(value), ep));
+	if (!value) {
+		return 0;
+	}
+
+	// 循环数组元素（以逗号分隔）
+	while (*value == ',') {
+		cJSON *new_item;
+		if (!(new_item = cJSON_New_Item())) {
+			return 0;
+		}
+		// 添加新项到链表数组的末尾
+		child->next = new_item;
+		new_item->prev = child;
+		child = new_item;
+
+		// 转到下一个逗号
+		value = skip(parse_value(child, skip(value + 1), ep));
+		if (!value) {
+			return 0;
+		}
+	}
+
+	if (*value == ']') {
+		return value + 1;
+	}
+	*ep = value;
+
+	return 0;
+}
 
 // 渲染数组到文本
+static char *print_array(const cJSON *item, int depth, int fmt, printbuffer *p) {
+	char **entries;
+	char *out = 0;
+	char *ptr;
+	char *ret;
+	int len = 5;
+	cJSON *child = item->child;
+	int numentries = 0;
+	int i = 0;
+	int fail = 0;
+	size_t tmplen = 0;
+
+	// 获取数组元素个数
+	while (child) {
+		numentries++;
+		child = child->next;
+	}
+
+	// 判断特殊情况 空数组（元素个数为0）
+	if (!numentries) {
+		if (p) {
+			out = ensure(p, 3);
+		}
+		else {
+			out = (char*)cJSON_malloc(3);
+		}
+		if (out) {
+			strcpy(out, "[]");
+		}
+		
+		return out;
+	} 
+
+	if (p) {
+		// 组合输出数组
+		// 方括号
+		i = p->offset;
+		ptr = ensure(p, 1);
+		if (!ptr) {
+			return 0;
+		}
+		*ptr = '[';
+		p->offset++;
+		child = item->child;
+		while (child && !fail) {
+			print_value(child, depth + 1, fmt, p);
+			p->offset = update(p);
+			if (child->next) {
+				len = fmt ? 2 : 1;	//规范数组需要 空格+逗号 两个字符
+				ptr = ensure(p, len + 1);
+				if (!ptr) {
+					return 0;
+				}
+				*ptr++ = ',';
+				if (fmt) {
+					*ptr += ' ';
+				}
+				*ptr = '\0';
+				p->offset += len;
+			}
+			child = child->next;
+		}
+		ptr = ensure(p, 2);
+		if (!ptr) {
+			return 0;
+		}
+		*ptr++ = ']';
+		*ptr = '\0';
+		out = (p->buffer) + i;
+	} else {
+		// 分配一个数组以保存指向所有打印值的指针
+		entries = (char**)cJSON_malloc(numentries * sizeof(char*));
+		if (!entries) {
+			return 0;
+		}
+		memset(entries, 0, numentries * sizeof(char*));
+
+		// 获取所有结果
+		child = item->child;
+		while (child && !fail) {
+			ret = print_value(child, depth + 1, fmt, 0);
+			entries[i++] = ret;
+			if (ret) {
+				len += strlen(ret) + 2 + (fmt ? 1 : 0);
+			} else {
+				fail = 1;
+			}
+			child = child->next;
+		}
+
+		// 若没有错误， 则为out分配空间
+		if (!fail) {
+			out = (char*)cJSON_malloc(len);
+		} 
+
+		if (!out) {
+			fail = 1;
+		}
+
+		// 处理错误
+		if (fail) {
+			// 释放数组中所有元素空间
+			for (i = 0; i < numentries; i++) {
+				if (entries[i]) {
+					cJSON_free(entries[i]);
+				}
+			}
+			cJSON_free(entries);
+			return 0;
+		}
+
+		// 组成输出数组
+		*out = '[';
+		ptr = out + 1;
+		*ptr = '\0';
+		for (i = 0; i < numentries; i++) {
+			tmplen = strlen(entries[i]);
+			memcpy(ptr, entries[i], tmplen);
+			ptr += tmplen;
+			if (i != (numentries - 1)) {
+				*ptr++ = ',';
+				if (fmt) {
+					*ptr++ = ' ';
+				}
+				*ptr = '\0';
+			}
+			cJSON_free(entries[i]);
+		}
+		cJSON_free(entries);
+		*ptr++ = ']';
+		*ptr++ = '\0';
+	}
+	return out;
+}
 
 // 通过文本创建对象
 
@@ -874,7 +1056,7 @@ void cJSON_AddItemToObject(cJSON *object, const char *string, cJSON *item) {
 	}
 	// 释放掉item的旧key值
 	if (item->string) {
-		cJSON_frre(item->string);
+		cJSON_free(item->string);
 	}
 	item->string = cJSON_strdup(string);
 
@@ -895,5 +1077,9 @@ void cJSON_AddItemToObjectCS(cJSON *object, const char *string, cJSON *item) {
 }
 
 void cJSON_AddItemReferenceToArray(cJSON *array, cJSON *item) {
+	cJSON_AddItemToArray(array, create_reference(item));
+}
 
+void	cJSON_AddItemReferenceToObject(cJSON *object, const char *string, cJSON *item) {
+	cJSON_AddItemToObject(object, string, create_reference(item));
 }
