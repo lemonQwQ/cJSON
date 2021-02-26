@@ -612,8 +612,8 @@ static const char *parse_value(cJSON *item, const char *value, const char **ep);
 static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p); // fmt是否规范
 static const char *parse_array(cJSON *item, const char *value, const char **ep);
 static char *print_array(const cJSON *item, int depth, int fmt, printbuffer *p);
-/*static const char *parse_object(cJSON *item, const char *value, const char **ep);
-static char *print_object(const cJSON *item, int depth, int fmt, printbuffer *p);*/
+static const char *parse_object(cJSON *item, const char *value, const char **ep);
+static char *print_object(const cJSON *item, int depth, int fmt, printbuffer *p);
 
 // 跳过空指针、null、 无法打印字符
 static const char *skip(const char *in) {
@@ -709,9 +709,9 @@ static const char *parse_value(cJSON *item, const char *value, const char **ep) 
 	if (*value == '[') {
 		return parse_array(item, value, ep);
 	}
-	/*if (*value == '{') {
+	if (*value == '{') {
 		return parse_object(item, value, ep);
-	}*/
+	}
 	*ep = value;
 	return 0;
 }
@@ -752,9 +752,9 @@ static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p) 
 			case cJSON_Array:
 				out = print_array(item, depth, fmt, p);
 				break;
-			/*case cJSON_Object:
+			case cJSON_Object:
 				out = print_object(item, depth, fmt, p);
-				break;*/
+				break;
 		} 
 	} else {
 		switch ((item->type) & 0xFF)
@@ -777,9 +777,9 @@ static char *print_value(const cJSON *item, int depth, int fmt, printbuffer *p) 
 			case cJSON_Array:
 				out = print_array(item, depth, fmt, 0);
 				break;
-			/*case cJSON_Object:
+			case cJSON_Object:
 				out = print_object(item, depth, fmt, 0);
-				break;*/
+				break;
 		}
 	}
 
@@ -975,8 +975,297 @@ static char *print_array(const cJSON *item, int depth, int fmt, printbuffer *p) 
 }
 
 // 通过文本创建对象
+static const char *parse_object(cJSON *item, const char *value, const char **ep) {
+	cJSON *child;
+	if (*value != '{') {
+		// 不是一个对象
+		*ep = value;
+		return 0;
+	}
+
+	item->type = cJSON_Object;
+	value = skip(value + 1);
+	if (*value == '}') {
+		return value + 1;
+	}
+
+	item->child = child = cJSON_New_Item();
+	if (!item->child) {
+		return 0;
+	}
+
+	// 解析第一个键
+	value = skip(parse_string(child, skip(value), ep));
+	if (!value) {
+		return 0;
+	}
+
+	child->string = child->valuestring;
+	child->valuestring = 0;
+
+	if (*value != ':') {
+		// 无效对象
+		*ep = value;
+		return 0;
+	}
+	value = skip(parse_value(child, skip(value + 1), ep));
+	if (!value) {
+		return 0;
+	}
+
+	while (*value == ',') {
+		cJSON *new_item;
+		if (!(new_item = cJSON_New_Item())) {
+			return 0;
+		}
+		child->next = new_item;
+		new_item->prev = child;
+		child = new_item;
+
+		value = skip(parse_string(child, skip(value + 1), ep));
+		if (!value) {
+			return 0;
+		}
+
+		child->string = child->valuestring;
+		child->valuestring = 0;
+		if (*value != ':') {
+			*ep = value;
+			return 0;
+		}
+		value = skip(parse_value(child, skip(value + 1), ep));
+		if (!value) {
+			return 0;
+		}
+	}
+
+	if (*value == '}') {
+		return value + 1;
+	}
+	*ep = value;
+	return 0;
+}
 
 // 渲染对象到文本
+static char *print_object(const cJSON *item, int depth, int fmt, printbuffer *p) {
+	char **entries = 0;
+	char **names = 0;
+	char *out = 0;
+	char *ptr;
+	char *ret;
+	char *str;
+	int len = 7; // 7?
+	int i = 0;
+	int j;
+	cJSON *child = item->child;
+	int numentries = 0;
+	int fail = 0;
+	size_t tmplen = 0;
+
+	// 统计子结点个数
+	while (child) {
+		numentries++;
+		child = child->next;
+	}
+
+	// 空对象情况
+	if (!numentries) {
+		if (p) {
+			out = ensure(p, fmt ? depth + 4 : 3);
+		}
+		else {
+			out = (char*)cJSON_malloc(fmt ? depth + 4 : 3);
+		}
+		if (!out) {
+			return 0;
+		}
+		ptr = out;
+		*ptr++ = '{';
+		if (fmt) {
+			*ptr++ = '\n';
+			for (i = 0; i < depth; i++) {
+				*ptr++ = '\t';
+			}
+		}
+		*ptr++ = '}';
+		*ptr++ = '\0';
+		return out;
+	} 
+	if (p) {
+		i = p->offset;
+		len = fmt ? 2 : 1; // fmt: {\n 两个字符
+		ptr = ensure(p, len + 1);
+		if (!ptr) {
+			return 0;
+		}
+
+		*ptr++ = '{';
+		if (fmt) {
+			*ptr++ = '\n';
+		}
+		*ptr = '\0';
+		p->offset += len;
+
+		child = item->child;
+		depth++;
+		while (child) {
+			if (fmt) {
+				ptr = ensure(p, depth);
+				if (!ptr) {
+					return 0;
+				}
+				for (j = 0; j < depth; j++) {
+					*ptr++ = '\t';
+				}
+				p->offset += depth;
+			}
+			// 打印键 
+			print_string_ptr(child->string, p);
+			p->offset += depth;
+
+			len = fmt ? 2 : 1;
+			ptr = ensure(p, len);
+			if (!ptr) {
+				return 0;
+			}
+			*ptr++ = ':';
+			if (fmt) {
+				*ptr++ = '\t';
+			}
+			p->offset += len;
+
+			// 打印值
+			print_value(child, depth, fmt, p);
+			p->offset = update(p);
+
+			// 若不是最后一个，则打印逗号
+			len = (fmt ? 1 : 0) + (child->next ? 1 : 0);
+			ptr = ensure(p, len + 1);
+			if (!ptr) {
+				return 0;
+			}
+			if (child->next) {
+				*ptr++ = ',';
+			}
+			if (fmt) {
+				*ptr++ = '\n';
+			}
+			*ptr = '\0';
+			p->offset += len;
+
+			child = child->next;
+		}
+		ptr = ensure(p, fmt ? (depth + 1) : 2);
+		if (!ptr) {
+			return 0;
+		} 
+		if (fmt) {
+			for (i = 0; i < (depth - 1); i++) {
+				*ptr++ = '\t';
+			}
+		}
+		*ptr++ = '}';
+		*ptr = '\0';
+		out = (p->offset) + i;
+	} else {
+		// value值数组空间分配
+		entries = (char**)cJSON_malloc(numentries * sizeof(char*));
+		if (!entries) {
+			return 0;
+		}
+		// key值数组空间分配
+		names = (char**)cJSON_malloc(numentries * sizeof(char*));
+		if (!names) {
+			return 0;
+		}
+		memset(entries, 0, sizeof(char*) * numentries);
+		memset(names, 0, sizeof(char*) * numentries);
+
+		child = item->child;
+		depth++;
+		if (fmt) {
+			len += depth;
+		}
+		
+		// 将所有子结点的键值对收集到数组中
+		while (child && !fail) {
+			names[i] = str = print_string_ptr(child->string, 0);
+			entries[i++] = ret = print_value(child, depth, fmt, 0);
+			if (str && ret) {
+				len += strlen(ret) + strlen(str) + 2 + (fmt ? 2 + depth : 0);
+			} else {
+				fail = 1;
+			}
+			child = child->next;
+		}
+
+		// 为输出结果分配空间
+		if (!fail) {
+			out = (char*)cJSON_malloc(len);
+		} 
+		if (!out) {
+			fail = 1;
+		}
+
+		// 处理错误
+		if (fail) {
+			for (i = 0; i < numentries; i++) {
+				if (names[i]) {
+					cJSON_free(names[i]);
+				}
+				if (entries[i]) {
+					cJSON_free(entries[i]);
+				}
+			}
+			cJSON_free(names);
+			cJSON_free(entries);
+			return 0;
+		}
+		
+		*out = '{';
+		ptr = out + 1;
+		if (fmt) {
+			*ptr++ = '\n';
+		}
+		*ptr = '\0';
+		for (i = 0; i < numentries; i++) {
+			if (fmt) {
+				for (j = 0; j < depth; j++) {
+					*ptr++ = '\t';
+				}
+			}
+			tmplen = strlen(names[i]);
+			memcpy(ptr, names[i], tmplen);
+			ptr += tmplen;
+			*ptr++ = ':';
+			if (fmt) {
+				*ptr++ = '\t';
+			}
+			strcpy(ptr, entries[i]);
+			ptr += strlen(entries[i]);
+			if (i != (numentries - 1)) {
+				*ptr++ = ',';
+			}
+			if (fmt) {
+				*ptr++ = '\n';
+			}
+			*ptr = '\0';
+			cJSON_free(names[i]);
+			cJSON_free(entries[i]);
+		}
+		
+		cJSON_free(names);
+		cJSON_free(entries);
+		if (fmt) {
+			for (i = 0; i < (depth - 1); i++) {
+				*ptr++ = '\t';
+			}
+		} 
+		*ptr++ = '}';
+		*ptr++ = '\0';
+	}
+	return out;
+} 
 
 // 获取 数组长度、cJSON对象item
 int	  cJSON_GetArraySize(const cJSON *array) {
