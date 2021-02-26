@@ -71,7 +71,7 @@ void cJSON_InitHooks(cJSON_Hooks* hooks) {
 static cJSON *cJSON_New_Item(void) {
 	cJSON* node = (cJSON*)cJSON_malloc(sizeof(cJSON));
 	if (node) {
-		memset(node, 0, sizeof(node));
+		memset(node, 0, sizeof(cJSON));
 	}
 	return node;
 }
@@ -248,7 +248,7 @@ static char *print_number(const cJSON *item, printbuffer *p) {
 			strcpy(str, "0");
 		}
 
-	} else if ((fabs(((double)item->valuedouble) - d) <= DBL_EPSILON) && (d <= INT_MAX) && (d >= INT_MIN)) { 	
+	} else if ((fabs(((double)item->valueint) - d) <= DBL_EPSILON) && (d <= INT_MAX) && (d >= INT_MIN)) { 	
 		// 当前数字是整数 
 		// 至少21位数，因为2^64-1次 为 21位 即需要21个字符
 		if (p) {
@@ -829,4 +829,10 @@ cJSON *cJSON_GetObjectItem(const cJSON *object, const char *string) {
 // 判断key值为string的cJSON是否存在
 int cJSON_HasObjectItem(const cJSON *object, const char *string) {
 	return cJSON_GetObjectItem(object, string) ? 1 : 0;
+}
+
+// 数组处理函数
+static void suffix_object(cJSON *prev, cJSON *item) {
+	prev->next = item;
+	item->prev = prev;
 }
