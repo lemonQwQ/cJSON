@@ -1309,7 +1309,7 @@ static void suffix_object(cJSON *prev, cJSON *item) {
 }
 
 
-// 处理参照（reference）函数 key/value
+// 处理参照（reference）函数
 static cJSON *create_reference(const cJSON *item) {
 	cJSON *ref = cJSON_New_Item();
 	if (!ref) {
@@ -1668,4 +1668,94 @@ cJSON *cJSON_CreateStringArray(const char **strings, int count) {
 	return a;
 }
 
+// cJSON拷贝函数
+cJSON *cJSON_Duplicate(const cJSON *item, int recurse) {
+	cJSON *newitem;
+	cJSON *cptr;
+	cJSON *nptr = 0;
+	cJSON *newchild;
 
+	if (!item) {
+		return 0;
+	}
+	newitem = cJSON_New_Item();
+	if (!newitem) {
+		return 0;
+	}
+	newitem->type = item->type & (~cJSON_IsReference);
+	newitem->valueint = item->valueint;
+	newitem->valuedouble = item->valuedouble;
+	if (item->valuestring) {
+		newitem->valuestring = cJSON_strdup(item->valuestring);
+		if (!newitem->valuestring) {
+			cJSON_Delete(newitem);
+			return 0;
+		}
+	}
+	if (item->string) {
+		newitem->string = cJSON_strdup(item->string);
+		if (!newitem->string) {
+			cJSON_delete(newitem);
+			return 0;
+		}
+	}
+	// 若是无需拷贝子结点则直接返回
+	if (!recurse) {
+		return newitem;
+	}
+
+	cptr = item->child;
+	while (cptr) {
+		newchild = cJSON_Duplicate(cptr, 1);
+		if (!newchild) {
+			cJSON_Delete(newitem);
+			return 0;
+		}
+		if (nptr) {
+			nptr->next = newchild;
+			newchild->prev = nptr;
+			nptr = newchild;
+		} else {
+			newitem->child = newchild;
+			nptr = newchild;
+		}
+		cptr = cptr->next;
+	}
+
+	return newitem;
+}
+
+// 字符串简化 (去空格、回车、注释等等)
+void cJSON_Minify(char *json) {
+	char *into = json;
+	while (*json) {
+		if (*json == ' ') {
+			json++;
+		} else if (*json == '\t') {
+			json++;
+		} else if (*json == '\n') {
+			json++;
+		} else if ((*json == '/') && (json[1] == '/')) {
+			while (*json && (*json != '\n')) {
+				json++;
+			}
+		} else if ((*json == '/') && (json[1] == '*')) {
+			while (*json && !((*json == '*') && (json[1] == '/'))) {
+				json++;
+			}
+			json += 2;
+		} else if (*json == '\"') {
+			*into++ = *json++;
+			while (*json && (*json != '\"')) {
+				if (*json == '\\') {
+					*into++ = *json++;
+				}
+				*into++ = *json++;
+			}
+			*into++ = *json++;
+		} else {
+			*into++ = *json++;
+		}
+	}
+	*into = '\0';
+}
