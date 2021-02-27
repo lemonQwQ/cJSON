@@ -1428,6 +1428,67 @@ extern void   cJSON_DeleteItemFromObject(cJSON *object, const char *string) {
 	cJSON_Delete(cJSON_DetachItemFromObject(object, string));
 }
 
+// 插入数组第which项中
+extern void cJSON_InsertItemInArray(cJSON *array, int which, cJSON *newitem) {
+	cJSON *c = array->child;
+	while (c && (which > 0)) {
+		c = c->next;
+		which--;
+	}
+	if (!c) {
+		cJSON_AddItemToArray(array, newitem);
+		return ;
+	}
 
+	newitem->next = c;
+	newitem->prev = c->prev;
+	c->prev = newitem;
+	if (c == array->child) {
+		array->child = newitem;
+	} else {
+		newitem->prev->next = newitem;
+	}
+}
 
+// 替换数组第which项
+extern void cJSON_ReplaceItemInArray(cJSON *array, int which, cJSON *newitem) {
+	cJSON *c = array->child;
+	while (c && (which > 0)) {
+		c = c->next;
+		which--;
+	}
+	if (!c) {
+		return ;
+	}
 
+	newitem->next = c->next;
+	newitem->prev = c->prev;
+	if (newitem->next) {
+		newitem->next->prev = newitem;
+	}
+	if (c == array->child) {
+		array->child = newitem;
+	} else {
+		newitem->prev->next = newitem;
+	}
+	c->prev = c->next = 0;
+	cJSON_Delete(c);
+}
+
+// 替换cJSON对象中key值为string的项
+extern void cJSON_ReplaceItemInObject(cJSON *object, const char *string, cJSON *newitem) {
+	int i = 0;
+	cJSON *c = object->child;
+	while (c && cJSON_strcasecmp(c->string, string)) {
+		i++;
+		c = c->next;
+	}
+	if (!c) {
+		return;
+	}
+	if (!(newitem->type & cJSON_StringIsConst) && newitem->string) {
+		cJSON_free(newitem->string);
+	}
+	newitem->string = cJSON_strdup(string);
+	cJSON_ReplaceItemInArray(object, i, newitem);
+}

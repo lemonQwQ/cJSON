@@ -78,6 +78,10 @@ extern "C" //去寻找C标准的函数
 	extern cJSON *cJSON_DetachItemFromObject(cJSON *object, const char *string);
 	extern void   cJSON_DeleteItemFromObject(cJSON *object, const char *string);
 
+	extern void cJSON_InsertItemInArray(cJSON *array, int which, cJSON *newitem); /* Shifts pre-existing items to the right. */
+	extern void cJSON_ReplaceItemInArray(cJSON *array, int which, cJSON *newitem);
+	extern void cJSON_ReplaceItemInObject(cJSON *object, const char *string, cJSON *newitem);
+
 
 //	extern cJSON *cJSON_CreateNull(void);
 //	extern cJSON *cJSON_CreateTrue(void);
@@ -93,10 +97,7 @@ extern "C" //去寻找C标准的函数
 //	extern cJSON *cJSON_CreateDoubleArray(const double *numbers, int count);
 //	extern cJSON *cJSON_CreateStringArray(const char **strings, int count);
 
-//	extern void cJSON_InsertItemInArray(cJSON *array, int which, cJSON *newitem); /* Shifts pre-existing items to the right. */
-//	extern void cJSON_ReplaceItemInArray(cJSON *array, int which, cJSON *newitem);
-//	extern void cJSON_ReplaceItemInObject(cJSON *object, const char *string, cJSON *newitem);
-//
+
 //	extern cJSON *cJSON_Duplicate(const cJSON *item, int recurse);
 
 //	extern void cJSON_Minify(char *json);
